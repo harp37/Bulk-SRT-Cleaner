@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bulk SRT Cleaner</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #f5f5f5;
+            --container-bg: #ffffff;
+            --text-color: #333333;
+            --border-color: #dddddd;
+            --highlight-color: #4CAF50;
+            --highlight-hover: #45a049;
+            --progress-bg: #e0e0e0;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #1a1a1a;
+                --container-bg: #2d2d2d;
+                --text-color: #e0e0e0;
+                --border-color: #404040;
+                --highlight-color: #5db761;
+                --highlight-hover: #4c9750;
+                --progress-bg: #404040;
+            }
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 0 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        .container {
+            background-color: var(--container-bg);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        h1 {
+            margin-top: 0;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .dropzone {
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 40px 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            transition: border-color 0.3s ease;
+            cursor: pointer;
+        }
+
+        .dropzone.dragover {
+            border-color: var(--highlight-color);
+            background-color: rgba(76, 175, 80, 0.1);
+        }
+
+        .dropzone i {
+            font-size: 48px;
+            margin-bottom: 10px;
+            color: var(--highlight-color);
+        }
+
+        .file-list {
+            margin: 20px 0;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 10px;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .file-item:last-child {
+            border-bottom: none;
+        }
+
+        .file-info {
+            flex-grow: 1;
+        }
+
+        .file-name {
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .file-stats {
+            font-size: 0.9em;
+            color: var(--text-color);
+            opacity: 0.8;
+        }
+
+        .file-status {
+            margin-left: 10px;
+            font-style: italic;
+            min-width: 80px;
+            text-align: right;
+        }
+
+        .progress-container {
+            margin: 20px 0;
+            display: none;
+        }
+
+        .progress-bar {
+            height: 20px;
+            background-color: var(--progress-bg);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background-color: var(--highlight-color);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .process-btn {
+            background-color: var(--highlight-color);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin: 0 auto;
+        }
+
+        .process-btn:hover {
+            background-color: var(--highlight-hover);
+        }
+
+        .process-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        #status {
+            text-align: center;
+            margin-top: 10px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Bulk SRT Cleaner</h1>
+        
+        <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <p>Drop SRT files here or click to select</p>
+            <input type="file" id="fileInput" accept=".srt" multiple style="display: none">
+        </div>
+
+        <div class="file-list" id="fileList"></div>
+
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressBar"></div>
+            </div>
+            <div id="status"></div>
+        </div>
+
+        <button class="process-btn" id="processButton" onclick="processFiles()" disabled>
+            <i class="fas fa-cog"></i>
+            Process and Download ZIP
+        </button>
+    </div>
+
+    <script>
+        let selectedFiles = [];
+
+        // Dropzone and file handling
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('fileList');
+        const processButton = document.getElementById('processButton');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const status = document.getElementById('status');
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropzone.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight(e) {
+            dropzone.classList.add('dragover');
+        }
+
+        function unhighlight(e) {
+            dropzone.classList.remove('dragover');
+        }
+
+        dropzone.addEventListener('drop', handleDrop, false);
+        fileInput.addEventListener('change', handleFileSelect);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFiles(files);
+        }
+
+        function handleFileSelect(e) {
+            const files = e.target.files;
+            handleFiles(files);
+        }
+
+        function handleFiles(files) {
+            selectedFiles = Array.from(files).filter(file => file.name.toLowerCase().endsWith('.srt'));
+            updateFileList();
+            processButton.disabled = selectedFiles.length === 0;
+        }
+
+        function updateFileList() {
+            fileList.innerHTML = '';
+            selectedFiles.forEach(file => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.innerHTML = `
+                    <div class="file-info">
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-stats">
+                            Removed: <span class="sound-effects-count">-</span> | 
+                            Fixed: <span class="corrections-count">-</span> | 
+                            Words: <span class="word-count">-</span>
+                        </div>
+                    </div>
+                    <span class="file-status">Pending</span>
+                `;
+                fileList.appendChild(fileItem);
+            });
+        }
+
+        // Get statistics for a file
+        function getFileStats(original, processed) {
+            // Count sound effects and bracketed content removed
+            const brackets = [
+                /\([^)]*\)/g,    // parentheses
+                /\[[^\]]*\]/g,   // square brackets
+                /\{[^}]*\}/g,    // curly brackets
+                /\*[^*]*\*/g,    // asterisks
+                /#[^#]*#/g       // hashtags
+            ];
+            
+            const soundEffectsCount = brackets.reduce((count, pattern) => {
+                const matches = original.match(pattern);
+                return count + (matches ? matches.length : 0);
+            }, 0);
+
+            // Count corrections made
+            const correctionPatterns = [
+                /Oh my god|Oh yeah|Hey babe|Hey love|Oh shit|Oh fuck|Me too|Hey dad|Oh my gosh/g
+            ];
+            const correctionsCount = correctionPatterns.reduce((count, pattern) => {
+                const matches = original.match(pattern);
+                return count + (matches ? matches.length : 0);
+            }, 0);
+
+            // Count words (excluding timestamps and line numbers)
+            const getWordCount = (text) => {
+                const cleanText = text.replace(/^\d+$|^\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}$/gm, '');
+                const words = cleanText.toLowerCase().match(/\b[a-z']+\b/g) || [];
+                return words.length;
+            };
+
+            const originalWordCount = getWordCount(original);
+            const processedWordCount = getWordCount(processed);
+
+            return {
+                soundEffects: soundEffectsCount,
+                corrections: correctionsCount,
+                words: `${originalWordCount} → ${processedWordCount}`
+            };
+        }
+        function applyCorrections(content) {
+            // Remove initial dashes and comma-dashes in lines
+            content = content.replace(/^,?\s*-\s*/gm, '');
+            content = content.replace(/\n,?\s*-\s*/g, '\n');
+
+            // Remove leading comma-space and capitalize first letter
+            content = content.replace(/^,\s+(\w)/gm, (match, letter) => letter.toUpperCase());
+            content = content.replace(/\n,\s+(\w)/g, (match, letter) => '\n' + letter.toUpperCase());
+
+            // First remove specific phrases
+            const removePhrases = [
+                /\(singing in foreign language\)/gi,
+                /\(sighs\)/gi,
+                /\(footsteps\)/gi,
+                /\(whimpers\)/gi,
+                /\(whimpering\)/gi,
+                /\(heavy breathing\)/gi,
+                /\(laughing\)/gi,
+                /\(choking\)/gi,
+                /\(groaning\)/gi,
+                /\(speaking in a foreign language\)/gi,
+                /\(upbeat music\)/gi,
+                /\(gasping\)/gi,
+                /\(chuckling\)/gi,
+                /\(grunting\)/gi,
+                /\(clapping\)/gi,
+                /\[MUSIC\] /gi,
+                /\[MUSIC PLAYING\]/gi,
+                /\[YAWN\]/gi,
+                /\[KLASPERING\]/gi,
+                /♪ ♪/g,
+                /♪/g,
+                />> /g
+            ];
+
+            removePhrases.forEach(phrase => {
+                content = content.replace(phrase, '');
+            });
+
+            // Remove all content between various brackets
+            content = content.replace(/\{[^}]*\}/g, '');  // Remove everything between { }
+            content = content.replace(/\([^)]*\)/g, '');  // Remove everything between ( )
+            content = content.replace(/\[[^\]]*\]/g, ''); // Remove everything between [ ]
+            content = content.replace(/\*[^*]*\*/g, '');  // Remove everything between * *
+            content = content.replace(/#[^#]*#/g, '');    // Remove everything between # #
+
+            // Second pass to catch nested brackets
+            content = content.replace(/\{[^}]*\}/g, '');
+            content = content.replace(/\([^)]*\)/g, '');
+            content = content.replace(/\[[^\]]*\]/g, '');
+            content = content.replace(/\*[^*]*\*/g, '');
+            content = content.replace(/#[^#]*#/g, '');
+
+            // Clean up spacing
+            content = content.replace(/ +/g, ' ');
+            content = content.replace(/^,?\s*-\s*/gm, '');
+            content = content.replace(/\n,?\s*-\s*/g, '\n');
+            content = content.replace(/^,\s+(\w)/gm, (match, letter) => letter.toUpperCase());
+            content = content.replace(/\n,\s+(\w)/g, (match, letter) => '\n' + letter.toUpperCase());
+            content = content.replace(/^ +| +$/gm, '');
+            content = content.replace(/\n{3,}/g, '\n\n');
+
+            // Text corrections
+            const commaCorrections = [
+                { from: /(?:,\s*)?[Oo]h,?\s*my\s*[Gg]od\./g, to: "Oh, my god!" },
+                { from: /\bOh shit\./g, to: "Oh, shit!" },
+                { from: /\bOh my gosh\./g, to: "Oh, my gosh!" },
+                { from: /\bOh like that\b/g, to: "Oh, like that" },
+                { from: /\bYes yes\b/g, to: "Yes, yes" },
+                { from: /\bYes, yes, yes\./g, to: "Yes, yes, yes!" },
+                { from: /\bOh fuck\b/g, to: "Oh, fuck" },
+                { from: /\bOh, fuck\./g, to: "Oh, fuck!" },
+                { from: /\bFuck\./g, to: "Fuck!" },
+                { from: /F\*ck/g, to: "Fuck" },
+                { from: /f\*ck/g, to: "fuck" },
+                { from: /sh\*t/g, to: "shit" },
+                { from: /Sh\*t/g, to: "Shit" },
+                { from: /, oh\./g, to: "Oh." },
+                { from: /\bHey babe\b/g, to: "Hey, babe" },
+                { from: /\bHey love\b/g, to: "Hey, love" },
+                { from: /\bOh yeah\b/g, to: "Oh, yeah" },
+                { from: /I don't know,/g, to: "I don't know." },
+                { from: /\bdon't know\b/g, to: "dunno" },
+                { from: /\byou know\b/g, to: "y'know" },
+                { from: /\bMe too\b/g, to: "Me, too" },
+                { from: /\bHey dad\b/g, to: "Hey, dad" },
+                { from: /I'm good, how/g, to: "I'm good. How" },
+                { from: /\bNice to meet you too\b/g, to: "Nice to meet you, too" },
+                { from: /\bSo what\b/g, to: "So, what" },
+                { from: /\bWell let's\b/g, to: "Well, let's" },
+                { from: /\bThank you daddy\b/g, to: "Thank you, daddy" },
+                { from: /\bHi honey\b/g, to: "Hi, honey" },
+                { from: /\bOh yes\b/g, to: "Oh, yes" },
+                { from: /\bOtherwise we\b/g, to: "Otherwise, we" },
+                { from: /\bUh huh\./g, to: "Uh-huh." },
+                { from: /\bI understand Mr\b/g, to: "I understand, Mr" },
+                { from: /\bOh my goodness\./g, to: "Oh, my goodness!" }
+            ];
+
+            commaCorrections.forEach(correction => {
+                content = content.replace(correction.from, correction.to);
+            });
+
+            return content;
+        }
+
+        async function processFiles() {
+            if (selectedFiles.length === 0) {
+                alert('Please select SRT files first.');
+                return;
+            }
+
+            processButton.disabled = true;
+            progressContainer.style.display = 'block';
+            
+            const zip = new JSZip();
+            let processed = 0;
+
+            for (let i = 0; i < selectedFiles.length; i++) {
+                const file = selectedFiles[i];
+                try {
+                    // Update status
+                    status.textContent = `Processing ${file.name}...`;
+                    const fileItems = fileList.getElementsByClassName('file-item');
+                    if (fileItems[i]) {
+                        fileItems[i].querySelector('.file-status').textContent = 'Processing...';
+                    }
+
+                    // Read and process file
+                    const content = await new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onload = (e) => resolve(e.target.result);
+                        reader.readAsText(file);
+                    });
+
+                    // Double process the content
+                    let processedContent = applyCorrections(content);
+                    processedContent = applyCorrections(processedContent); // Second pass
+
+                    // Get and update statistics
+                    const stats = getFileStats(content, processedContent);
+                    if (fileItems[i]) {
+                        const fileItem = fileItems[i];
+                        fileItem.querySelector('.sound-effects-count').textContent = stats.soundEffects;
+                        fileItem.querySelector('.corrections-count').textContent = stats.corrections;
+                        fileItem.querySelector('.word-count').textContent = stats.words;
+                    }
+
+                    // Add to ZIP
+                    zip.file(file.name, processedContent);
+
+                    // Update progress
+                    processed++;
+                    const progress = (processed / selectedFiles.length) * 100;
+                    progressBar.style.width = `${progress}%`;
+
+                    // Update file status
+                    if (fileItems[i]) {
+                        fileItems[i].querySelector('.file-status').textContent = 'Completed';
+                    }
+                } catch (error) {
+                    console.error(`Error processing ${file.name}:`, error);
+                    const fileItems = fileList.getElementsByClassName('file-item');
+                    if (fileItems[i]) {
+                        fileItems[i].querySelector('.file-status').textContent = 'Error';
+                    }
+                }
+            }
+
+            try {
+                // Create and download ZIP
+                status.textContent = 'Creating ZIP file...';
+                const blob = await zip.generateAsync({type: 'blob'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'cleaned_subtitles.zip';
+                document.body.appendChild(a);
+                a.click();
+                URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                status.textContent = 'Processing complete!';
+                setTimeout(() => {
+                    progressContainer.style.display = 'none';
+                    processButton.disabled = false;
+                    status.textContent = '';
+                }, 3000);
+            } catch (error) {
+                console.error('Error creating ZIP:', error);
+                status.textContent = 'Error creating ZIP file';
+                processButton.disabled = false;
+            }
+        }
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</body>
+</html>

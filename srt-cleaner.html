@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SRT File Cleaner</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #f5f5f5;
+            --container-bg: #ffffff;
+            --text-color: #333333;
+            --border-color: #dddddd;
+            --highlight-color: #4CAF50;
+            --highlight-hover: #45a049;
+            --textarea-bg: #ffffff;
+            --summary-bg: #f8f9fa;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #1a1a1a;
+                --container-bg: #2d2d2d;
+                --text-color: #e0e0e0;
+                --border-color: #404040;
+                --highlight-color: #5db761;
+                --highlight-hover: #4c9750;
+                --textarea-bg: #363636;
+                --summary-bg: #363636;
+            }
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        .container {
+            background-color: var(--container-bg);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+        }
+
+        .summary-container {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .summary {
+            flex: 1;
+            padding: 15px;
+            background-color: var(--summary-bg);
+            border-radius: 4px;
+            border-left: 4px solid var(--highlight-color);
+        }
+
+        .word-stats {
+            flex: 1;
+            padding: 15px;
+            background-color: var(--summary-bg);
+            border-radius: 4px;
+            border-left: 4px solid #3f51b5;
+        }
+
+        h1 {
+            margin-top: 0;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .icon-button {
+            background-color: var(--highlight-color);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .icon-button:hover {
+            background-color: var(--highlight-hover);
+        }
+
+        .icon-button i {
+            font-size: 1.2em;
+        }
+
+        input[type="file"] {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            background-color: var(--container-bg);
+        }
+
+        input[type="file"]::file-selector-button {
+            background-color: var(--highlight-color);
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+
+        input[type="file"]::file-selector-button:hover {
+            background-color: var(--highlight-hover);
+        }
+
+        .split-view {
+            display: flex;
+            gap: 20px;
+            margin-top: 10px;
+        }
+
+        .split-pane {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .textarea-label {
+            padding: 5px 10px;
+            background-color: var(--border-color);
+            border-radius: 4px 4px 0 0;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        textarea {
+            width: 100%;
+            height: 400px;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 0 0 4px 4px;
+            font-family: monospace;
+            background-color: var(--textarea-bg);
+            color: var(--text-color);
+            resize: vertical;
+            line-height: 1.5;
+        }
+
+        #fileStatus {
+            text-align: center;
+            margin: 10px 0;
+            font-style: italic;
+        }
+
+        .summary {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: var(--summary-bg);
+            border-radius: 4px;
+            border-left: 4px solid var(--highlight-color);
+        }
+
+        .summary h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+
+        .summary ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .summary li {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SRT File Cleaner</h1>
+        
+        <div class="controls">
+            <input type="file" id="fileInput" accept=".srt">
+            <button class="icon-button" onclick="downloadSRT()" title="Save cleaned SRT">
+                <i class="fas fa-save"></i>
+            </button>
+        </div>
+        <div id="fileStatus"></div>
+
+        <div class="split-view">
+            <div class="split-pane">
+                <div class="textarea-label">Original SRT</div>
+                <textarea id="original" placeholder="Original SRT content..." readonly></textarea>
+            </div>
+            <div class="split-pane">
+                <div class="textarea-label">Cleaned SRT</div>
+                <textarea id="output" placeholder="Cleaned SRT content..." readonly></textarea>
+            </div>
+        </div>
+
+        <div class="summary-container">
+            <div class="summary">
+                <h3>Changes Summary</h3>
+                <ul>
+                    <li>Sound effects removed: <span id="soundEffectsCount">0</span></li>
+                    <li>Text corrections made: <span id="correctionsCount">0</span></li>
+                    <li>Dash lines fixed: <span id="dashLinesCount">0</span></li>
+                </ul>
+            </div>
+            <div class="word-stats">
+                <h3>Word Statistics</h3>
+                <ul>
+                    <li>Total words: <span id="wordCount">0 → 0</span></li>
+                    <li>Most common: <span id="commonWord">-</span></li>
+                    <li>Least common: <span id="uncommonWord">-</span></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let originalContent = '';
+        let processedContent = '';
+        let originalFilename = '';
+
+        // Synchronize scroll positions
+        document.getElementById('original').addEventListener('scroll', function(e) {
+            document.getElementById('output').scrollTop = this.scrollTop;
+        });
+
+        document.getElementById('output').addEventListener('scroll', function(e) {
+            document.getElementById('original').scrollTop = this.scrollTop;
+        });
+
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            const status = document.getElementById('fileStatus');
+            
+            document.getElementById('original').value = '';
+            document.getElementById('output').value = '';
+            originalContent = '';
+            processedContent = '';
+            
+            if (file) {
+                originalFilename = file.name;
+                status.textContent = `Selected: ${originalFilename}`;
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    originalContent = e.target.result;
+                    document.getElementById('original').value = originalContent;
+                    processFile();
+                };
+                reader.readAsText(file);
+            } else {
+                status.textContent = '';
+            }
+        });
+
+        function getWordStats(text) {
+            // Remove timestamps, line numbers, and any other non-word content
+            const cleanText = text.replace(/^\d+$|^\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}$/gm, '');
+            
+            // Split into words and clean, only keeping actual words (no numbers or symbols)
+            const words = cleanText.toLowerCase().match(/\b[a-z']+\b/g) || [];
+            
+            if (words.length === 0) return { count: 0, most: '-', least: '-' };
+
+            // Count word frequencies
+            const wordFreq = {};
+            words.forEach(word => {
+                // Additional check to ensure we're only counting actual words
+                if (!/^\d+$/.test(word) && word.length > 1) { // Ignore single letters too
+                    wordFreq[word] = (wordFreq[word] || 0) + 1;
+                }
+            });
+
+            // Find most and least common
+            let mostCommon = { word: '', count: 0 };
+            let leastCommon = { word: '', count: Infinity };
+
+            for (const [word, count] of Object.entries(wordFreq)) {
+                if (count > mostCommon.count) {
+                    mostCommon = { word, count };
+                }
+                if (count < leastCommon.count || 
+                    (count === leastCommon.count && word < leastCommon.word)) { // Use alphabetical order for ties
+                    leastCommon = { word, count };
+                }
+            }
+
+            return {
+                count: words.length,
+                most: mostCommon.word ? `"${mostCommon.word}" (${mostCommon.count}x)` : '-',
+                least: leastCommon.word ? `"${leastCommon.word}" (${leastCommon.count}x)` : '-'
+            };
+        }
+
+        function updateSummary(original, processed) {
+            // Count sound effects removed
+            const soundEffectsMatch = original.match(/\([^)]*\)/g);
+            const soundEffectsCount = soundEffectsMatch ? soundEffectsMatch.length : 0;
+
+            // Count corrections made (commas added, etc.)
+            const commaCorrectionsCount = (original.match(/Oh my god|Oh yeah|Hey babe|Hey love/g) || []).length;
+
+            // Count dash lines fixed
+            const dashLinesCount = (original.match(/^-\s/gm) || []).length;
+
+            // Get word statistics
+            const originalStats = getWordStats(original);
+            const processedStats = getWordStats(processed);
+
+            // Update the summary
+            document.getElementById('soundEffectsCount').textContent = soundEffectsCount;
+            document.getElementById('correctionsCount').textContent = commaCorrectionsCount;
+            document.getElementById('dashLinesCount').textContent = dashLinesCount;
+
+            // Update word statistics
+            document.getElementById('wordCount').textContent = `${originalStats.count} → ${processedStats.count}`;
+            document.getElementById('commonWord').textContent = processedStats.most;
+            document.getElementById('uncommonWord').textContent = processedStats.least;
+        }
+
+        function processFile() {
+            if (!originalContent) {
+                return;
+            }
+
+            let content = originalContent;
+
+            // Define all phrases to remove
+            const removePhrases = [
+                /\(singing in foreign language\)/gi,
+                /\(sighs\)/gi,
+                /\(footsteps\)/gi,
+                /\(whimpers\)/gi,
+                /\(whimpering\)/gi,
+                /\(heavy breathing\)/gi,
+                /\(laughing\)/gi,
+                /\(choking\)/gi,
+                /\(groaning\)/gi,
+                /\(speaking in a foreign language\)/gi,
+                /\(upbeat music\)/gi,
+                /\(gasping\)/gi,
+                /\(chuckling\)/gi,
+                /\(grunting\)/gi,
+                /\(clapping\)/gi,
+                /\[MUSIC\] /gi,
+                /\[MUSIC PLAYING\]/gi,
+                /\[YAWN\]/gi,
+                /\[KLASPERING\]/gi,
+                /♪ ♪/g,
+                /♪/g,
+                />> /g
+            ];
+
+            // Remove initial dashes and comma-dashes in lines before any other processing
+            content = content.replace(/^,?\s*-\s*/gm, '');
+            content = content.replace(/\n,?\s*-\s*/g, '\n');
+
+            // Remove leading comma-space and capitalize first letter
+            content = content.replace(/^,\s+(\w)/gm, (match, letter) => letter.toUpperCase());
+            content = content.replace(/\n,\s+(\w)/g, (match, letter) => '\n' + letter.toUpperCase());
+
+            // First pass: Apply specific removals
+            removePhrases.forEach(phrase => {
+                content = content.replace(phrase, '');
+            });
+
+            // First pass: Remove all parenthetical content
+            content = content.replace(/\([^)]*\)/g, '');
+            content = content.replace(/\[[^\]]*\]/g, '');
+
+            // Check for dashes and comma-dashes again after first pass
+            content = content.replace(/^,?\s*-\s*/gm, '');
+            content = content.replace(/\n,?\s*-\s*/g, '\n');
+            
+            // Remove leading comma-space and capitalize first letter (second pass)
+            content = content.replace(/^,\s+(\w)/gm, (match, letter) => letter.toUpperCase());
+            content = content.replace(/\n,\s+(\w)/g, (match, letter) => '\n' + letter.toUpperCase());
+
+            // Second pass: Re-apply specific removals
+            removePhrases.forEach(phrase => {
+                content = content.replace(phrase, '');
+            });
+
+            // Second pass: Remove any remaining parenthetical content
+            content = content.replace(/\([^)]*\)/g, '');
+            content = content.replace(/\[[^\]]*\]/g, '');
+            
+            // Clean up spacing and check for all special cases one final time
+            content = content.replace(/ +/g, ' ');
+            content = content.replace(/^,?\s*-\s*/gm, '');
+            content = content.replace(/\n,?\s*-\s*/g, '\n');
+            content = content.replace(/^,\s+(\w)/gm, (match, letter) => letter.toUpperCase());
+            content = content.replace(/\n,\s+(\w)/g, (match, letter) => '\n' + letter.toUpperCase());
+            content = content.replace(/^ +| +$/gm, '');
+            content = content.replace(/\n{3,}/g, '\n\n');
+
+            // Add commas where needed and normalize text
+            const commaCorrections = [
+                { from: /\bOh my god\b/g, to: "Oh, my god" },
+                { from: /\bOh my God\b/g, to: "Oh, my god" },
+                { from: /\bYes I do\b/g, to: "Yes, I do" },
+                { from: /\bOh my gosh\b/g, to: "Oh, my gosh" },
+                { from: /\bOh like that\b/g, to: "Oh, like that" },
+                { from: /\bYes yes\b/g, to: "Yes, yes" },
+                { from: /\bOh fuck\b/g, to: "Oh, fuck" },
+                { from: /F\*ck/g, to: "Fuck" },
+                { from: /f\*ck/g, to: "fuck" },
+                { from: /sh\*t/g, to: "shit" },
+                { from: /Sh\*t/g, to: "Shit" },
+                { from: /, oh\./g, to: "Oh." },
+                { from: /\bHey babe\b/g, to: "Hey, babe" },
+                { from: /\bHey love\b/g, to: "Hey, love" },
+                { from: /\bOh yeah\b/g, to: "Oh, yeah" },
+                { from: /I don't know,/g, to: "I don't know." },
+                { from: /\bMe too\b/g, to: "Me, too" },
+                { from: /\bHey dad\b/g, to: "Hey, dad" },
+                { from: /I'm good, how/g, to: "I'm good. How" },
+                { from: /\bNice to meet you too\b/g, to: "Nice to meet you, too" },
+                { from: /\bSo what\b/g, to: "So, what" },
+                { from: /\bWell let's\b/g, to: "Well, let's" },
+                { from: /\bThank you daddy\b/g, to: "Thank you, daddy" },
+                { from: /\bHi honey\b/g, to: "Hi, honey" },
+                { from: /\bOh yes\b/g, to: "Oh, yes" }
+            ];
+
+            // Apply text corrections
+            commaCorrections.forEach(correction => {
+                content = content.replace(correction.from, correction.to);
+            });
+
+            // Final spacing cleanup
+            content = content.replace(/ +/g, ' ');
+            content = content.replace(/^ +| +$/gm, '');
+            content = content.replace(/\n{3,}/g, '\n\n');
+
+            processedContent = content;
+            document.getElementById('output').value = processedContent;
+
+            // Update summary
+            updateSummary(originalContent, processedContent);
+        }
+
+        function downloadSRT() {
+            if (!processedContent) {
+                alert('Please select an SRT file first.');
+                return;
+            }
+
+            const blob = new Blob([processedContent], { type: 'text/srt' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = originalFilename || 'subtitles.srt';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        }
+    </script>
+</body>
+</html>
